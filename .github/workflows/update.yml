@@ -1,0 +1,32 @@
+name: Refresh World Cup pool
+
+# Runs `npm run refresh` (update scores + schedule, then recompute + push the forecast)
+# on a schedule, plus a manual "Run workflow" button. Free on a PUBLIC repo.
+on:
+  schedule:
+    # ~every 10 minutes, offset off the hour to dodge GitHub's :00/:30 cron rush.
+    # Cron is best-effort, so real spacing is ~10–25 min — fine for this. Times are UTC.
+    - cron: "3,13,23,33,43,53 * * * *"
+  workflow_dispatch: {}
+
+# If a run is somehow still going when the next tick fires, drop the older one.
+concurrency:
+  group: wc-refresh
+  cancel-in-progress: true
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run refresh
+        env:
+          FOOTBALL_DATA_API_KEY: ${{ secrets.FOOTBALL_DATA_API_KEY }}
+          STATS_PUSH_URL: ${{ secrets.STATS_PUSH_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}

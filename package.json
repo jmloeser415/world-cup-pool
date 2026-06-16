@@ -1,0 +1,19 @@
+{
+  "name": "world-cup-pool",
+  "version": "1.0.0",
+  "description": "World Cup 2026 pool scoreboard updater (local, manual run)",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "update": "node update.mjs",
+    "forecast": "node forecast.mjs",
+    "refresh": "node update.mjs && node forecast.mjs",
+    "test": "node test.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  }
+}
