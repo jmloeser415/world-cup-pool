@@ -5,8 +5,8 @@
 // website needs except the ⭐ scorer / 🛡️ defense categories, which aren't in the
 // /stats contract yet (phase 2). Before June 11 there are no results, so it pushes zeros.
 import 'dotenv/config';
-import { PLAYERS, TEAMS } from './src/data.js';
-import { getMatches, getStandings } from './src/footballData.js';
+import { PLAYERS, TEAMS, SPECIAL_PICKS } from './src/data.js';
+import { getMatches, getStandings, getScorers } from './src/footballData.js';
 import { normalizeName, groupLetterFromApi } from './src/score.js';
 import { buildStatsMap } from './src/buildStatsMap.js';
 import { buildSchedule } from './src/buildSchedule.js';
@@ -31,7 +31,7 @@ const teamPts = (s) =>
   (s.game1 ?? 0) + (s.game2 ?? 0) + (s.game3 ?? 0) + finishBonus(s.finish) + knockoutPts(s.knockoutWins) + (s.won3rd ? 3 : 0);
 
 async function main() {
-  const [mr, sr] = await Promise.all([getMatches(), getStandings()]);
+  const [mr, sr, scr] = await Promise.all([getMatches(), getStandings(), getScorers().catch(() => ({ scorers: [] }))]);
   const apiMatches = mr.matches || [];
 
   const matches = apiMatches.map((m) => {
@@ -102,6 +102,27 @@ async function main() {
     s.eliminated = !!s.lostKnockout || (bracketDrawn && !koTeams.has(name) && (s.gamesPlayed ?? 0) >= 3);
     delete s.lostKnockout;
   }
+
+  // ── Scorer goals (LIVE — not gated on full-time), keyed by pool-player id ──
+  const SCORER_TEAM = { 'Lautaro Martínez': 'Argentina', 'Romelu Lukaku': 'Belgium', 'Erling Haaland': 'Norway', 'Mikel Oyarzabal': 'Spain', 'Cristiano Ronaldo': 'Portugal' };
+  const scorersIndex = {};
+  for (const sgoal of scr.scorers || []) scorersIndex[normalizeName(sgoal.player?.name)] = sgoal.goals ?? 0;
+  const maxGoals = Math.max(0, ...Object.values(scorersIndex));
+  const goldenBootKeys = maxGoals > 0 ? Object.entries(scorersIndex).filter(([, g]) => g === maxGoals).map(([k]) => k) : [];
+  const tournamentComplete = matches.length > 0 && matches.every((m) => m.isFinished);
+  const scorersOut = {};
+  for (const p of PLAYERS) {
+    const pick = SPECIAL_PICKS[p.id]?.topScorer;
+    if (!pick) continue;
+    const key = normalizeName(pick);
+    const team = SCORER_TEAM[pick];
+    scorersOut[p.id] = {
+      goals: scorersIndex[key] ?? 0,
+      goldenBoot: tournamentComplete && goldenBootKeys.includes(key) ? 2 : 0,
+      gamesPlayed: team ? statsMap[team]?.gamesPlayed ?? 0 : 0,
+    };
+  }
+  statsMap._scorers = scorersOut;
 
   if (DRY_RUN) {
     console.log('\n--- DRY RUN: would PUT /stats (statsMap) and /schedule (schedule) ---');

@@ -35,11 +35,12 @@ export function buildStatsMap(teams, matches, standingsByTeam, groupCompleteByLe
       gp[i] = f > a ? 3 : f === a ? 1 : 0;
     });
 
-    let goalsFor = 0, goalsAgainst = 0, knockoutWins = 0, wonTitle = false, won3rd = false, lostKnockout = false;
+    let goalsFor = 0, goalsAgainst = 0, knockoutWins = 0, wonTitle = false, won3rd = false, lostKnockout = false, cleanSheets = 0;
     for (const m of mine) {
       const s = side(m, t.id);
       goalsFor += gf(m, s);
       goalsAgainst += ga(m, s);
+      if (ga(m, s) === 0) cleanSheets += 1; // shutout: conceded 0 (shootout goals excluded). Only finished matches.
       if (m.stage === 'GROUP_STAGE') continue;
       if (THIRD_PLACE_STAGES.has(m.stage)) { if (won(m, s)) won3rd = true; continue; }
       if (ADVANCE_STAGES.has(m.stage)) {
@@ -59,7 +60,7 @@ export function buildStatsMap(teams, matches, standingsByTeam, groupCompleteByLe
       else if (st.position === 2) finish = 'second';
     }
 
-    out[t.name] = { game1: gp[0], game2: gp[1], game3: gp[2], finish, knockoutWins, wonTitle, won3rd, goalsFor, goalsAgainst, gamesPlayed: mine.length, lostKnockout };
+    out[t.name] = { game1: gp[0], game2: gp[1], game3: gp[2], finish, knockoutWins, wonTitle, won3rd, goalsFor, goalsAgainst, gamesPlayed: mine.length, cleanSheets, lostKnockout };
   }
   return out;
 }

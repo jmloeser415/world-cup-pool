@@ -139,6 +139,7 @@ check('buildStatsMap: group + knockout + 3rd place', () => {
   assert.equal(s.goalsAgainst, 4);   // group 1 + knockout 3
   assert.equal(s.gamesPlayed, 8);    // 3 group + R32 + R16 + QF + SF + 3rd-place
   assert.equal(s.lostKnockout, true); // lost the semifinal
+  assert.equal(s.cleanSheets, 5);    // conceded 0 in g1, g2, R32, QF, 3rd-place
 });
 
 check('buildStatsMap: champion = knockoutWins 5, and fixed formula = 21', () => {

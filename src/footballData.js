@@ -35,4 +35,4 @@ async function get(path) {
 
 export const getMatches  = () => get('/matches');
 export const getStandings = () => get('/standings');
-export const getScorers  = () => get('/scorers?limit=30');
+export const getScorers  = () => get('/scorers?limit=100'); // top 100 so a picked striker isn't missed
