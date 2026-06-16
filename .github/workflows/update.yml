@@ -27,6 +27,7 @@ jobs:
       - run: npm ci
       - run: npm run refresh
         env:
+          NODE_OPTIONS: --dns-result-order=ipv4first
           FOOTBALL_DATA_API_KEY: ${{ secrets.FOOTBALL_DATA_API_KEY }}
           STATS_PUSH_URL: ${{ secrets.STATS_PUSH_URL }}
           SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
