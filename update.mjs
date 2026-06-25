@@ -97,7 +97,10 @@ async function main() {
       if (m.home.name && m.home.name !== 'TBD') koTeams.add(m.home.name);
       if (m.away.name && m.away.name !== 'TBD') koTeams.add(m.away.name);
     }
-  const bracketDrawn = koTeams.size > 0;
+  // Only trust "not in the bracket -> eliminated" once the FULL Round of 32 is drawn
+  // (32 teams slotted). Before that the bracket fills in piecemeal as groups finish,
+  // which would wrongly flag teams that have advanced but aren't slotted yet.
+  const bracketDrawn = koTeams.size >= 32;
   for (const [name, s] of Object.entries(statsMap)) {
     s.eliminated = !!s.lostKnockout || (bracketDrawn && !koTeams.has(name) && (s.gamesPlayed ?? 0) >= 3);
     delete s.lostKnockout;
