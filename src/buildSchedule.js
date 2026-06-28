@@ -24,6 +24,15 @@ export function buildSchedule(apiMatches, canonical = (n) => n, seed = {}) {
       const hasScore = ['FINISHED', 'AWARDED', 'IN_PLAY', 'PAUSED'].includes(m.status);
       const ft = m.score?.fullTime || {};
       const letter = groupLetterFromApi(m.group);
+      // Who advanced (knockout bracket needs this): penalties settle a draw, else the
+      // feed's winner, else the full-time score. null until the match is final.
+      const isFinished = m.status === 'FINISHED' || m.status === 'AWARDED';
+      const w = m.score?.winner;
+      const pen = m.score?.penalties;
+      const penSide = pen && pen.home != null && pen.away != null ? (pen.home > pen.away ? 'home' : 'away') : null;
+      const winner = !isFinished ? null
+        : penSide ?? (w === 'HOME_TEAM' ? 'home' : w === 'AWAY_TEAM' ? 'away'
+          : ((ft.home ?? 0) > (ft.away ?? 0) ? 'home' : (ft.away ?? 0) > (ft.home ?? 0) ? 'away' : null));
       return {
         id: m.id,
         date: m.utcDate,
@@ -35,6 +44,7 @@ export function buildSchedule(apiMatches, canonical = (n) => n, seed = {}) {
         away: side(away),
         homeScore: hasScore ? ft.home ?? null : null,
         awayScore: hasScore ? ft.away ?? null : null,
+        winner,
       };
     })
     .sort((a, b) => String(a.date).localeCompare(String(b.date)));

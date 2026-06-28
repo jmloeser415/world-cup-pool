@@ -246,6 +246,8 @@ check('buildSchedule: maps finished matches and TBD knockouts', () => {
   assert.equal(s[1].stageLabel, 'Round of 16');
   assert.equal(s[1].home.name, 'TBD');
   assert.equal(s[1].homeScore, null);
+  assert.equal(s[0].winner, 'home'); // Mexico won 2-0
+  assert.equal(s[1].winner, null);   // not played -> no winner
 });
 
 check('buildSchedule: seed fills unnamed knockout sides; real feed data wins', () => {
