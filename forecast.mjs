@@ -69,6 +69,26 @@ async function main() {
     if (hg > ag) H.groupGamePts += 3; else if (ag > hg) A.groupGamePts += 3; else { H.groupGamePts += 1; A.groupGamePts += 1; }
   }
 
+  // ── knockout results already played → lock them into every simulation ────────
+  // (winner advances, loser is out); keyed by team pair so simulateBracket applies them.
+  const KO_STAGES = new Set(['ROUND_OF_32', 'LAST_32', 'ROUND_OF_16', 'LAST_16', 'QUARTER_FINALS', 'SEMI_FINALS', 'THIRD_PLACE', '3RD_PLACE', 'FINAL']);
+  const knownKO = new Map();
+  for (const m of mr.matches || []) {
+    if (!KO_STAGES.has(m.stage)) continue;
+    if (!(m.status === 'FINISHED' || m.status === 'AWARDED')) continue;
+    const h = canonical(m.homeTeam?.name), a = canonical(m.awayTeam?.name);
+    if (!h || !a) continue;
+    const hg = m.score?.fullTime?.home ?? 0, ag = m.score?.fullTime?.away ?? 0;
+    const w = m.score?.winner;
+    const pen = m.score?.penalties;
+    const penSide = pen && pen.home != null && pen.away != null ? (pen.home > pen.away ? 'HOME' : 'AWAY') : null;
+    const wonSide = w === 'HOME_TEAM' ? 'HOME' : w === 'AWAY_TEAM' ? 'AWAY' : penSide; // pens settle a draw
+    if (!wonSide) continue; // winner not resolvable yet — leave it to the simulation
+    const key = h < a ? `${h} | ${a}` : `${a} | ${h}`;
+    knownKO.set(key, { goals: { [h]: hg, [a]: ag }, winner: wonSide === 'HOME' ? h : a });
+  }
+  if (knownKO.size) console.log(`🔒  ${knownKO.size} knockout result(s) locked in.`);
+
   // ── players (forecast view) + scorer expected-value ──────────────────────────
   const scorersIndex = {};
   for (const sc of scorersRes.scorers || []) scorersIndex[normalizeName(sc.player?.name)] = sc.goals ?? 0;
@@ -127,7 +147,7 @@ async function main() {
     ? '🪜  Using the real knockout bracket (src/bracket.js).'
     : '⚠️  src/bracket.js ≠ the 32 actual advancers — using rating-seeded bracket; update KO_BRACKET_ORDER.');
 
-  const forecast = runForecast({ groups, ratingOf: R.ratingOf, current, remainingGroupFixtures, players: fcPlayers, scorerEV, sims: SIMS, bracketOrder: bracketOk ? KO_BRACKET_ORDER : null });
+  const forecast = runForecast({ groups, ratingOf: R.ratingOf, current, remainingGroupFixtures, players: fcPlayers, scorerEV, sims: SIMS, bracketOrder: bracketOk ? KO_BRACKET_ORDER : null, knownKO });
 
   // ── report ───────────────────────────────────────────────────────────────────
   const board = PLAYERS.map((p) => ({ Player: p.name, 'Win %': forecast[p.id].winProb, 'Proj. pts': forecast[p.id].projectedTotal, ScorerEV: +scorerEV[p.id].toFixed(1) }))

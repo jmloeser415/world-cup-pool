@@ -279,4 +279,17 @@ check('bracket: simulateBracket plays the full tree (107 KO pts, 16 R32 winners)
   assert.equal(teams.filter((t) => t.ko > 0).length, 16); // only the 16 R32 winners ever score KO points
 });
 
+check('forecast: knownKO locks a played knockout result (winner advances, loser out)', () => {
+  const ratingOf = (n) => 1500 + Number(n.slice(1)) * 3;
+  const knownKO = new Map([['T0 | T1', { goals: { T0: 0, T1: 2 }, winner: 'T1' }]]); // lock the R32 tie at slots 0,1
+  for (let trial = 0; trial < 25; trial++) {
+    const teams = Array.from({ length: 32 }, (_, i) => ({ name: 'T' + i, gf: 0, ga: 0, cs: 0, ko: 0, place: 0 }));
+    simulateBracket(teams, ratingOf, knownKO);
+    assert.equal(teams[0].ko, 0);   // T0 lost its R32 tie -> never scores KO points
+    assert.ok(teams[1].ko >= 3);    // T1 won R32 (locked) -> at least the R32 points
+    assert.equal(teams[0].gf, 0); assert.equal(teams[0].ga, 2); // actual goals applied to the loser
+    assert.ok(teams[1].cs >= 1);    // T1 conceded 0 in the locked tie -> a clean sheet
+  }
+});
+
 console.log(`\n✅  All ${passed} checks passed.\n`);
