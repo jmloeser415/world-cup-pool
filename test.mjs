@@ -222,9 +222,12 @@ check('forecast: runForecast win probabilities sum to 100', () => {
     { id: 'p1', teams: ['T0', 'T4', 'T8', 'T12'], defenseTeam: 'T0' },
     { id: 'p2', teams: ['T1', 'T5', 'T9', 'T13'], defenseTeam: 'T1' },
   ];
-  const out = runForecast({ groups, ratingOf, current: new Map(), remainingGroupFixtures: [], players, scorerEV: {}, sims: 300 });
+  const scorers = { p1: { team: 'T0', currentGoals: 2, gpm: 0.55, mult: 1.5, goldenBootPts: 0.4 } };
+  const out = runForecast({ groups, ratingOf, current: new Map(), remainingGroupFixtures: [], players, scorers, sims: 300 });
   assert.ok(Math.abs(out.p1.winProb + out.p2.winProb - 100) < 1e-6);
   assert.ok(Number.isFinite(out.p1.projectedTotal));
+  assert.ok(out.p1.scorerPoints > 3);   // 2 current goals ×1.5, plus future-match EV + golden boot
+  assert.equal(out.p2.scorerPoints, 0); // p2 has no scorer pick
 });
 
 // ── buildSchedule ────────────────────────────────────────────────────────────
@@ -271,7 +274,7 @@ check('bracket: KO_BRACKET_ORDER matches the R32 seed (32 teams, same pairings)'
 });
 
 check('bracket: simulateBracket plays the full tree (107 KO pts, 16 R32 winners)', () => {
-  const teams = Array.from({ length: 32 }, (_, i) => ({ name: 'T' + i, gf: 0, ga: 0, cs: 0, ko: 0, place: 0 }));
+  const teams = Array.from({ length: 32 }, (_, i) => ({ name: 'T' + i, gf: 0, ga: 0, cs: 0, ko: 0, place: 0, fg: 0 }));
   const ratingOf = (n) => 1500 + Number(n.slice(1)) * 3; // distinct ratings
   simulateBracket(teams, ratingOf);
   const totalKo = teams.reduce((a, t) => a + t.ko, 0);
@@ -283,12 +286,14 @@ check('forecast: knownKO locks a played knockout result (winner advances, loser 
   const ratingOf = (n) => 1500 + Number(n.slice(1)) * 3;
   const knownKO = new Map([['T0 | T1', { goals: { T0: 0, T1: 2 }, winner: 'T1' }]]); // lock the R32 tie at slots 0,1
   for (let trial = 0; trial < 25; trial++) {
-    const teams = Array.from({ length: 32 }, (_, i) => ({ name: 'T' + i, gf: 0, ga: 0, cs: 0, ko: 0, place: 0 }));
+    const teams = Array.from({ length: 32 }, (_, i) => ({ name: 'T' + i, gf: 0, ga: 0, cs: 0, ko: 0, place: 0, fg: 0 }));
     simulateBracket(teams, ratingOf, knownKO);
     assert.equal(teams[0].ko, 0);   // T0 lost its R32 tie -> never scores KO points
     assert.ok(teams[1].ko >= 3);    // T1 won R32 (locked) -> at least the R32 points
     assert.equal(teams[0].gf, 0); assert.equal(teams[0].ga, 2); // actual goals applied to the loser
     assert.ok(teams[1].cs >= 1);    // T1 conceded 0 in the locked tie -> a clean sheet
+    assert.equal(teams[0].fg, 0);   // T0 eliminated -> no future (simulated) matches counted
+    assert.ok(teams[1].fg >= 1);    // T1 advanced -> plays at least the simulated R16
   }
 });
 

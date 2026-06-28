@@ -74,6 +74,7 @@ function koMatch(A, B, points, ratingOf, knownKO) {
     winner = known.winner === A.name ? 'A' : 'B';
   } else {
     ({ gA, gB, winner } = simMatch(ratingOf(A.name), ratingOf(B.name), true));
+    A.fg += 1; B.fg += 1; // an unplayed (simulated) match — a future scoring opportunity
   }
   A.gf += gA; A.ga += gB; B.gf += gB; B.ga += gA;
   if (gB === 0) A.cs += 1;
@@ -125,21 +126,21 @@ export function simulateBracket(bracket, ratingOf, knownKO) {
 
 // Run the forecast. Returns per player:
 //   { winProb, projectedTotal, teamTotal, scorerPoints, defensePoints, teams:{name:pts} }
-export function runForecast({ groups, ratingOf, current, remainingGroupFixtures, players, scorerEV = {}, sims = 20000, bracketOrder = null, knownKO = null }) {
+export function runForecast({ groups, ratingOf, current, remainingGroupFixtures, players, scorers = {}, sims = 20000, bracketOrder = null, knownKO = null }) {
   const draftedTeams = [...new Set(players.flatMap((p) => p.teams))];
   const allTeamNames = new Set(Object.values(groups).flat());
   // Use the real draw when a complete, valid 32-team bracket is supplied; else reseed by rating.
   const useBracket = Array.isArray(bracketOrder) && bracketOrder.length === 32
     && new Set(bracketOrder).size === 32 && bracketOrder.every((n) => allTeamNames.has(n));
-  const wins = {}, totalSum = {}, teamTotalSum = {}, defenseSum = {}, teamPtsSum = {};
-  for (const p of players) { wins[p.id] = 0; totalSum[p.id] = 0; teamTotalSum[p.id] = 0; defenseSum[p.id] = 0; }
+  const wins = {}, totalSum = {}, teamTotalSum = {}, defenseSum = {}, scorerSum = {}, teamPtsSum = {};
+  for (const p of players) { wins[p.id] = 0; totalSum[p.id] = 0; teamTotalSum[p.id] = 0; defenseSum[p.id] = 0; scorerSum[p.id] = 0; }
 
   for (let i = 0; i < sims; i++) {
     const st = new Map();
     const ensure = (n) => {
       if (!st.has(n)) {
         const c = current.get(n) || {};
-        st.set(n, { name: n, pts: c.groupGamePts ?? 0, gf: c.gf ?? 0, ga: c.ga ?? 0, cs: c.cleanSheets ?? 0, ko: 0, place: 0 });
+        st.set(n, { name: n, pts: c.groupGamePts ?? 0, gf: c.gf ?? 0, ga: c.ga ?? 0, cs: c.cleanSheets ?? 0, ko: 0, place: 0, fg: 0 });
       }
       return st.get(n);
     };
@@ -148,6 +149,7 @@ export function runForecast({ groups, ratingOf, current, remainingGroupFixtures,
     // remaining group games
     for (const [h, a] of remainingGroupFixtures) {
       const A = ensure(h), B = ensure(a);
+      A.fg += 1; B.fg += 1; // future (unplayed) group match
       const { gA, gB } = simMatch(ratingOf(h), ratingOf(a), false);
       A.gf += gA; A.ga += gB; B.gf += gB; B.ga += gA;
       if (gA > gB) A.pts += 3; else if (gB > gA) B.pts += 3; else { A.pts += 1; B.pts += 1; }
@@ -173,11 +175,20 @@ export function runForecast({ groups, ratingOf, current, remainingGroupFixtures,
     for (const t of st.values())
       outcome.set(t.name, { groupGamePts: t.pts, placeBonus: t.place, knockoutPts: t.ko, gf: t.gf, ga: t.ga, cleanSheets: t.cs });
 
-    const scored = scoreOutcome(outcome, players, scorerEV);
+    // Scorer points this run: current goals + (goals/match × the matches the team still plays
+    // in THIS sim) × multiplier + golden-boot bonus. fg is 0 once the team is eliminated.
+    const scorerPts = {};
+    for (const p of players) {
+      const sc = scorers[p.id];
+      scorerPts[p.id] = sc ? (sc.currentGoals + (st.get(sc.team)?.fg ?? 0) * sc.gpm) * sc.mult + sc.goldenBootPts : 0;
+    }
+
+    const scored = scoreOutcome(outcome, players, scorerPts);
     let bestId = null, best = null;
     for (const p of players) {
       const s = scored[p.id];
       totalSum[p.id] += s.total; teamTotalSum[p.id] += s.teamTotal; defenseSum[p.id] += s.defense;
+      scorerSum[p.id] += scorerPts[p.id];
       if (!best || s.total > best.total || (s.total === best.total && s.gd > best.gd)) { best = s; bestId = p.id; }
     }
     wins[bestId] += 1;
@@ -193,7 +204,7 @@ export function runForecast({ groups, ratingOf, current, remainingGroupFixtures,
       winProb: +(100 * wins[p.id] / sims).toFixed(1),
       projectedTotal: Math.round(totalSum[p.id] / sims),
       teamTotal: r1(teamTotalSum[p.id] / sims),
-      scorerPoints: r1(scorerEV[p.id] ?? 0),
+      scorerPoints: r1(scorerSum[p.id] / sims),
       defensePoints: r1(defenseSum[p.id] / sims),
       teams,
     };

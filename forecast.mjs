@@ -101,18 +101,22 @@ async function main() {
     defenseTeam: SPECIAL_PICKS[p.id]?.topDefenseTeamId ? idToName.get(SPECIAL_PICKS[p.id].topDefenseTeamId) : null,
   }));
 
-  const scorerEV = {};
+  // Per-striker inputs; runForecast turns these into points each sim, scaling goals by how
+  // many matches the striker's team actually plays in that run (0 once the team is eliminated).
+  const GOALS_PER_MATCH = 0.55; // a designated top scorer's ~goals per game
+  const scorers = {};
   for (const p of PLAYERS) {
     const sp = SPECIAL_PICKS[p.id];
-    if (!sp?.topScorer) { scorerEV[p.id] = 0; continue; }
+    if (!sp?.topScorer) continue;
     const k = normalizeName(sp.topScorer);
-    const pGB = goldenProbs.get(k) ?? 0;
-    const currentGoals = scorersIndex[k] ?? 0;
     const mult = tsCounts[k] === 1 && !k.includes('mbappe') && !k.includes('kane') ? 1.5 : 1;
-    const tr = R.ratingOf(scorerTeamByKey.get(k) || '');
-    const pct = Math.max(0, Math.min(1, (tr - 1500) / 450));
-    const expRemainingGoals = 0.55 * (1.5 + pct * 4.5); // ~0.55 goals × expected remaining matches
-    scorerEV[p.id] = (currentGoals + expRemainingGoals) * mult + pGB * 2;
+    scorers[p.id] = {
+      team: scorerTeamByKey.get(k) || '',
+      currentGoals: scorersIndex[k] ?? 0,
+      gpm: GOALS_PER_MATCH,
+      mult,
+      goldenBootPts: (goldenProbs.get(k) ?? 0) * 2,
+    };
   }
 
   // ── validate then run ────────────────────────────────────────────────────────
@@ -147,10 +151,10 @@ async function main() {
     ? '🪜  Using the real knockout bracket (src/bracket.js).'
     : '⚠️  src/bracket.js ≠ the 32 actual advancers — using rating-seeded bracket; update KO_BRACKET_ORDER.');
 
-  const forecast = runForecast({ groups, ratingOf: R.ratingOf, current, remainingGroupFixtures, players: fcPlayers, scorerEV, sims: SIMS, bracketOrder: bracketOk ? KO_BRACKET_ORDER : null, knownKO });
+  const forecast = runForecast({ groups, ratingOf: R.ratingOf, current, remainingGroupFixtures, players: fcPlayers, scorers, sims: SIMS, bracketOrder: bracketOk ? KO_BRACKET_ORDER : null, knownKO });
 
   // ── report ───────────────────────────────────────────────────────────────────
-  const board = PLAYERS.map((p) => ({ Player: p.name, 'Win %': forecast[p.id].winProb, 'Proj. pts': forecast[p.id].projectedTotal, ScorerEV: +scorerEV[p.id].toFixed(1) }))
+  const board = PLAYERS.map((p) => ({ Player: p.name, 'Win %': forecast[p.id].winProb, 'Proj. pts': forecast[p.id].projectedTotal, ScorerPts: forecast[p.id].scorerPoints }))
     .sort((a, b) => b['Win %'] - a['Win %']);
   console.log(`\n🔮  Forecast (${SIMS.toLocaleString()} sims) · ${remainingGroupFixtures.length} group games left`);
   console.table(board);
