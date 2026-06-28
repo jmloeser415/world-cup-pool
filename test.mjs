@@ -4,8 +4,10 @@ import { readFileSync } from 'node:fs';
 import { scoreTeam, scorePlayer, rankPlayers } from './src/score.js';
 import { buildStatsMap } from './src/buildStatsMap.js';
 import { devig, buildTeamRatings } from './src/ratings.js';
-import { scoreOutcome, eloWinProb, expectedGoals, runForecast } from './src/forecast.js';
+import { scoreOutcome, eloWinProb, expectedGoals, runForecast, simulateBracket } from './src/forecast.js';
 import { buildSchedule } from './src/buildSchedule.js';
+import { R32_SEED } from './src/r32Seed.js';
+import { KO_BRACKET_ORDER } from './src/bracket.js';
 
 let passed = 0;
 const check = (label, fn) => { fn(); passed++; console.log(`  ✓ ${label}`); };
@@ -255,6 +257,26 @@ check('buildSchedule: seed fills unnamed knockout sides; real feed data wins', (
   assert.equal(byId[200].home.name, 'France');    // both sides come from the seed
   assert.equal(byId[200].away.name, 'Sweden');
   assert.ok(byId[200].away.flag.length > 0);      // seeded team still resolves a flag
+});
+
+// ── real knockout bracket ─────────────────────────────────────────────────────
+check('bracket: KO_BRACKET_ORDER matches the R32 seed (32 teams, same pairings)', () => {
+  assert.equal(KO_BRACKET_ORDER.length, 32);
+  assert.equal(new Set(KO_BRACKET_ORDER).size, 32);
+  const bracketPairs = [];
+  for (let i = 0; i < 32; i += 2) bracketPairs.push([KO_BRACKET_ORDER[i], KO_BRACKET_ORDER[i + 1]].sort().join(' v '));
+  const seedPairs = Object.values(R32_SEED).map((m) => [m.home, m.away].sort().join(' v '));
+  assert.equal(bracketPairs.length, 16);
+  assert.deepEqual(bracketPairs.slice().sort(), seedPairs.slice().sort()); // same 16 ties
+});
+
+check('bracket: simulateBracket plays the full tree (107 KO pts, 16 R32 winners)', () => {
+  const teams = Array.from({ length: 32 }, (_, i) => ({ name: 'T' + i, gf: 0, ga: 0, cs: 0, ko: 0, place: 0 }));
+  const ratingOf = (n) => 1500 + Number(n.slice(1)) * 3; // distinct ratings
+  simulateBracket(teams, ratingOf);
+  const totalKo = teams.reduce((a, t) => a + t.ko, 0);
+  assert.equal(totalKo, 107);                             // 16·3 + 8·3 + 4·4 + 2·5 + 1·6 + 1·3(3rd)
+  assert.equal(teams.filter((t) => t.ko > 0).length, 16); // only the 16 R32 winners ever score KO points
 });
 
 console.log(`\n✅  All ${passed} checks passed.\n`);

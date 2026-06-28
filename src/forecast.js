@@ -3,8 +3,8 @@
 // V1 SIMPLIFICATIONS (documented):
 //  - Match goals: independent Poisson from an Elo-style strength gap.
 //  - Knockout draws decided by Elo win-probability (penalties).
-//  - Bracket: the 32 advancers are seeded by rating (best vs worst each round), not
-//    FIFA's exact slot mapping. Affects who-plays-whom, never the scoring rules.
+//  - Bracket: uses the REAL draw when `bracketOrder` is supplied (src/bracket.js);
+//    otherwise reseeds by rating (best vs worst). Either way the scoring rules are identical.
 //  - Best 8 third-place teams chosen by (points, GD, GF) across the 12 groups.
 //  - Scorer points enter as a per-player expected-value constant (scorerEV).
 
@@ -58,40 +58,63 @@ export function scoreOutcome(outcome, players, scorerEV = {}) {
   return res;
 }
 
-function simulateKnockout(seeds /* sorted by rating desc */, ratingOf) {
-  let round = seeds.slice();
+// One knockout tie: simulate it, accrue goals/clean-sheets, award `points` to the winner.
+function koMatch(A, B, points, ratingOf) {
+  const { gA, gB, winner } = simMatch(ratingOf(A.name), ratingOf(B.name), true);
+  A.gf += gA; A.ga += gB; B.gf += gB; B.ga += gA;
+  if (gB === 0) A.cs += 1;
+  if (gA === 0) B.cs += 1;
+  const W = winner === 'A' ? A : B, L = winner === 'A' ? B : A;
+  W.ko += points;
+  return { W, L };
+}
+
+// Play a single-elim tree from `round` (leaf order) down to the final, then the
+// 3rd-place game between the two semi-final losers. `pairsOf` picks each round's ties.
+function runBracket(round, pairsOf, ratingOf) {
   let roundIdx = 0; // 0=R32 … 4=Final
   let sfLosers = [];
   while (round.length > 1) {
     const winners = [], losers = [];
-    const n = round.length;
-    for (let i = 0; i < n / 2; i++) {
-      const A = round[i], B = round[n - 1 - i]; // best vs worst
-      const { gA, gB, winner } = simMatch(ratingOf(A.name), ratingOf(B.name), true);
-      A.gf += gA; A.ga += gB; B.gf += gB; B.ga += gA;
-      if (gB === 0) A.cs += 1;
-      if (gA === 0) B.cs += 1;
-      const W = winner === 'A' ? A : B, L = winner === 'A' ? B : A;
-      W.ko += KO_POINTS[roundIdx];
+    for (const [A, B] of pairsOf(round)) {
+      const { W, L } = koMatch(A, B, KO_POINTS[roundIdx], ratingOf);
       winners.push(W); losers.push(L);
     }
     if (roundIdx === 3) sfLosers = losers;
     round = winners; roundIdx += 1;
   }
-  if (sfLosers.length === 2) { // 3rd-place game
-    const [A, B] = sfLosers;
-    const { gA, gB, winner } = simMatch(ratingOf(A.name), ratingOf(B.name), true);
-    A.gf += gA; A.ga += gB; B.gf += gB; B.ga += gA;
-    if (gB === 0) A.cs += 1;
-    if (gA === 0) B.cs += 1;
-    (winner === 'A' ? A : B).ko += 3;
-  }
+  if (sfLosers.length === 2) koMatch(sfLosers[0], sfLosers[1], 3, ratingOf); // 3rd-place game
+}
+
+// Rating reseed (best vs worst) — fallback bracket when the real draw isn't supplied.
+const seededPairs = (round) => {
+  const n = round.length, pairs = [];
+  for (let i = 0; i < n / 2; i++) pairs.push([round[i], round[n - 1 - i]]);
+  return pairs;
+};
+// Adjacent pairs — a fixed/real bracket given in leaf order (0v1, 2v3, …).
+const adjacentPairs = (round) => {
+  const pairs = [];
+  for (let i = 0; i < round.length; i += 2) pairs.push([round[i], round[i + 1]]);
+  return pairs;
+};
+
+function simulateKnockout(seeds /* sorted by rating desc */, ratingOf) {
+  runBracket(seeds.slice(), seededPairs, ratingOf);
+}
+// Real draw: `bracket` is the 32 advancers in leaf order (see src/bracket.js).
+export function simulateBracket(bracket, ratingOf) {
+  runBracket(bracket.slice(), adjacentPairs, ratingOf);
 }
 
 // Run the forecast. Returns per player:
 //   { winProb, projectedTotal, teamTotal, scorerPoints, defensePoints, teams:{name:pts} }
-export function runForecast({ groups, ratingOf, current, remainingGroupFixtures, players, scorerEV = {}, sims = 20000 }) {
+export function runForecast({ groups, ratingOf, current, remainingGroupFixtures, players, scorerEV = {}, sims = 20000, bracketOrder = null }) {
   const draftedTeams = [...new Set(players.flatMap((p) => p.teams))];
+  const allTeamNames = new Set(Object.values(groups).flat());
+  // Use the real draw when a complete, valid 32-team bracket is supplied; else reseed by rating.
+  const useBracket = Array.isArray(bracketOrder) && bracketOrder.length === 32
+    && new Set(bracketOrder).size === 32 && bracketOrder.every((n) => allTeamNames.has(n));
   const wins = {}, totalSum = {}, teamTotalSum = {}, defenseSum = {}, teamPtsSum = {};
   for (const p of players) { wins[p.id] = 0; totalSum[p.id] = 0; teamTotalSum[p.id] = 0; defenseSum[p.id] = 0; }
 
@@ -127,8 +150,8 @@ export function runForecast({ groups, ratingOf, current, remainingGroupFixtures,
     thirds.sort(cmpTeam);
     advancers.push(...thirds.slice(0, 8));
 
-    advancers.sort((x, y) => ratingOf(y.name) - ratingOf(x.name));
-    simulateKnockout(advancers, ratingOf);
+    if (useBracket) simulateBracket(bracketOrder.map(ensure), ratingOf);
+    else { advancers.sort((x, y) => ratingOf(y.name) - ratingOf(x.name)); simulateKnockout(advancers, ratingOf); }
 
     const outcome = new Map();
     for (const t of st.values())

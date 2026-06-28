@@ -11,6 +11,7 @@ import { getMatches, getStandings, getScorers } from './src/footballData.js';
 import { normalizeName, groupLetterFromApi } from './src/score.js';
 import { buildTeamRatings, goldenBootProbs } from './src/ratings.js';
 import { runForecast } from './src/forecast.js';
+import { KO_BRACKET_ORDER } from './src/bracket.js';
 
 const DRY_RUN = process.argv.includes('--dry-run');
 const SIMS = 20000;
@@ -105,7 +106,28 @@ async function main() {
   }
   if (defaulted.length) console.warn(`⚠️  ${defaulted.length} team(s) using default rating (name mismatch w/ odds data): ${defaulted.join(', ')}`);
 
-  const forecast = runForecast({ groups, ratingOf: R.ratingOf, current, remainingGroupFixtures, players: fcPlayers, scorerEV, sims: SIMS });
+  // Real knockout draw: confirm the hardcoded bracket still equals the 32 actual advancers
+  // (top 2 per group + 8 best thirds); if not, fall back to the rating reseed.
+  const realAdvancers = (() => {
+    const top2 = [], thirds = [];
+    for (const s of sr.standings || []) {
+      if (s.type && s.type !== 'TOTAL') continue;
+      for (const row of s.table || []) {
+        const nm = canonical(row.team?.name);
+        if (row.position <= 2) top2.push(nm);
+        else if (row.position === 3) thirds.push({ nm, p: row.points ?? 0, gd: row.goalDifference ?? 0, gf: row.goalsFor ?? 0 });
+      }
+    }
+    thirds.sort((a, b) => b.p - a.p || b.gd - a.gd || b.gf - a.gf);
+    return new Set([...top2, ...thirds.slice(0, 8).map((t) => t.nm)]);
+  })();
+  const bracketOk = KO_BRACKET_ORDER.length === 32 && new Set(KO_BRACKET_ORDER).size === 32
+    && realAdvancers.size === 32 && KO_BRACKET_ORDER.every((n) => realAdvancers.has(n));
+  console.log(bracketOk
+    ? '🪜  Using the real knockout bracket (src/bracket.js).'
+    : '⚠️  src/bracket.js ≠ the 32 actual advancers — using rating-seeded bracket; update KO_BRACKET_ORDER.');
+
+  const forecast = runForecast({ groups, ratingOf: R.ratingOf, current, remainingGroupFixtures, players: fcPlayers, scorerEV, sims: SIMS, bracketOrder: bracketOk ? KO_BRACKET_ORDER : null });
 
   // ── report ───────────────────────────────────────────────────────────────────
   const board = PLAYERS.map((p) => ({ Player: p.name, 'Win %': forecast[p.id].winProb, 'Proj. pts': forecast[p.id].projectedTotal, ScorerEV: +scorerEV[p.id].toFixed(1) }))
