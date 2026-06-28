@@ -97,13 +97,28 @@ async function main() {
       if (m.home.name && m.home.name !== 'TBD') koTeams.add(m.home.name);
       if (m.away.name && m.away.name !== 'TBD') koTeams.add(m.away.name);
     }
-  // Only trust "not in the bracket -> eliminated" once the FULL Round of 32 is drawn
-  // (32 teams slotted). Before that the bracket fills in piecemeal as groups finish,
-  // which would wrongly flag teams that have advanced but aren't slotted yet.
+  // Eliminated when a team is definitively out:
+  //  (a) lost a knockout that wasn't the semifinal, or lost the 3rd-place game;
+  //  (b) finished 4th in a completed group (groupEliminated);
+  //  (c) once ALL groups are done, a 3rd-place team outside the 8-best-thirds cut;
+  //  (d) belt-and-suspenders: once the full R32 (32 teams) is drawn, anyone not in it.
   const bracketDrawn = koTeams.size >= 32;
+  const allGroupsComplete = 'ABCDEFGHIJKL'.split('').every((L) => groupCompleteByLetter[L]);
+  const eliminatedThirds = new Set();
+  if (allGroupsComplete) {
+    const thirds = [];
+    for (const st of sr.standings || []) {
+      if (st.type && st.type !== 'TOTAL') continue;
+      const row = (st.table || []).find((r) => r.position === 3);
+      if (row) thirds.push({ name: canonical(row.team?.name), points: row.points ?? 0, gd: row.goalDifference ?? 0, gf: row.goalsFor ?? 0 });
+    }
+    thirds.sort((a, b) => b.points - a.points || b.gd - a.gd || b.gf - a.gf);
+    thirds.slice(8).forEach((t) => eliminatedThirds.add(t.name)); // the 4 lowest thirds miss the cut
+  }
   for (const [name, s] of Object.entries(statsMap)) {
-    s.eliminated = !!s.lostKnockout || (bracketDrawn && !koTeams.has(name) && (s.gamesPlayed ?? 0) >= 3);
+    s.eliminated = !!s.lostKnockout || !!s.groupEliminated || eliminatedThirds.has(name) || (bracketDrawn && !koTeams.has(name));
     delete s.lostKnockout;
+    delete s.groupEliminated;
   }
 
   // ── Scorer goals (LIVE — not gated on full-time), keyed by pool-player id ──

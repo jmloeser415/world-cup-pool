@@ -138,7 +138,8 @@ check('buildStatsMap: group + knockout + 3rd place', () => {
   assert.equal(s.goalsFor, 13);      // group 6 + knockout 7
   assert.equal(s.goalsAgainst, 4);   // group 1 + knockout 3
   assert.equal(s.gamesPlayed, 8);    // 3 group + R32 + R16 + QF + SF + 3rd-place
-  assert.equal(s.lostKnockout, true); // lost the semifinal
+  assert.equal(s.lostKnockout, false); // lost the SEMI (excepted) then WON the 3rd-place game -> not out
+  assert.equal(s.groupEliminated, false); // finished 1st in group
   assert.equal(s.cleanSheets, 5);    // conceded 0 in g1, g2, R32, QF, 3rd-place
 });
 
@@ -153,6 +154,21 @@ check('buildStatsMap: champion = knockoutWins 5, and fixed formula = 21', () => 
   const KO = [3, 3, 4, 5, 6];
   const koPoints = KO.slice(0, Math.min(s.knockoutWins, 5)).reduce((a, b) => a + b, 0);
   assert.equal(koPoints, 21); // 3+3+4+5+6 — the value the buggy `knockoutWins*3 + 5` got wrong (20)
+});
+
+check('elimination rules: 4th place out; KO losses out except the semifinal', () => {
+  const T = (id) => ({ id, name: id, group: 'A', owner: 'igor' });
+  // 4th in a finished group -> groupEliminated, with no knockout loss
+  const g4 = buildStatsMap([T('g4')], [fm({ id: 1, stage: 'GROUP_STAGE', date: '1', homeId: 'g4', awayId: 'o', homeGoals: 0, awayGoals: 1, winnerSide: 'AWAY' })], { g4: { position: 4, group: 'A' } }, { A: true }).g4;
+  assert.equal(g4.groupEliminated, true);
+  assert.equal(g4.lostKnockout, false);
+  // knockout-only teams (no group standings)
+  const ko = (id, stage) => buildStatsMap([T(id)], [fm({ id: 9, stage, date: '1', homeId: id, awayId: 'o', homeGoals: 0, awayGoals: 1, winnerSide: 'AWAY' })], {}, {})[id];
+  assert.equal(ko('a', 'ROUND_OF_16').lostKnockout, true);    // lost R16 -> out
+  assert.equal(ko('b', 'QUARTER_FINALS').lostKnockout, true);  // lost QF -> out
+  assert.equal(ko('c', 'SEMI_FINALS').lostKnockout, false);    // lost SEMI -> NOT out (plays 3rd-place game)
+  assert.equal(ko('d', 'THIRD_PLACE').lostKnockout, true);     // lost 3rd-place game -> out
+  assert.equal(ko('e', 'FINAL').lostKnockout, true);           // lost FINAL -> out (runner-up)
 });
 
 // ── ratings: FIFA + odds blend ──────────────────────────────────────────────

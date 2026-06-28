@@ -35,4 +35,4 @@ async function get(path) {
 
 export const getMatches  = () => get('/matches');
 export const getStandings = () => get('/standings');
-export const getScorers  = () => get('/scorers?limit=100'); // top 100 so a picked striker isn't missed
+export const getScorers  = () => get('/scorers?limit=500'); // high limit: even a 1-goal picked striker can rank past 100

@@ -42,10 +42,15 @@ export function buildStatsMap(teams, matches, standingsByTeam, groupCompleteByLe
       goalsAgainst += ga(m, s);
       if (ga(m, s) === 0) cleanSheets += 1; // shutout: conceded 0 (shootout goals excluded). Only finished matches.
       if (m.stage === 'GROUP_STAGE') continue;
-      if (THIRD_PLACE_STAGES.has(m.stage)) { if (won(m, s)) won3rd = true; continue; }
+      if (THIRD_PLACE_STAGES.has(m.stage)) {
+        if (won(m, s)) won3rd = true;
+        else lostKnockout = true; // lost the 3rd-place game -> out
+        continue;
+      }
       if (ADVANCE_STAGES.has(m.stage)) {
         if (won(m, s)) { knockoutWins += 1; if (m.stage === 'FINAL') wonTitle = true; }
-        else lostKnockout = true; // lost a knockout match -> out of the tournament
+        // A knockout loss eliminates you — EXCEPT the semifinal (the loser still plays the 3rd-place game).
+        else if (m.stage !== 'SEMI_FINALS' && m.stage !== 'SEMI_FINAL') lostKnockout = true;
       } else {
         warn(`Unknown knockout stage "${m.stage}" for ${t.name} (match ${m.id})`);
       }
@@ -55,12 +60,17 @@ export function buildStatsMap(teams, matches, standingsByTeam, groupCompleteByLe
     let finish = 'other';
     const st = standingsByTeam[t.id];
     const letter = (st && st.group) || t.group;
-    if (st && groupCompleteByLetter[letter]) {
+    const groupComplete = !!(st && groupCompleteByLetter[letter]);
+    if (groupComplete) {
       if (st.position === 1) finish = 'first';
       else if (st.position === 2) finish = 'second';
     }
+    // 4th in a finished group can never reach the Round of 32 -> eliminated now.
+    // (3rd place is left undecided here — it depends on the 8-best-thirds cut, which
+    //  update.mjs resolves once the full R32 bracket is drawn.)
+    const groupEliminated = groupComplete && st.position === 4;
 
-    out[t.name] = { game1: gp[0], game2: gp[1], game3: gp[2], finish, knockoutWins, wonTitle, won3rd, goalsFor, goalsAgainst, gamesPlayed: mine.length, cleanSheets, lostKnockout };
+    out[t.name] = { game1: gp[0], game2: gp[1], game3: gp[2], finish, knockoutWins, wonTitle, won3rd, goalsFor, goalsAgainst, gamesPlayed: mine.length, cleanSheets, lostKnockout, groupEliminated };
   }
   return out;
 }
