@@ -243,4 +243,18 @@ check('buildSchedule: maps finished matches and TBD knockouts', () => {
   assert.equal(s[1].homeScore, null);
 });
 
+check('buildSchedule: seed fills unnamed knockout sides; real feed data wins', () => {
+  const api = [
+    { id: 100, utcDate: '2026-06-29T20:30:00Z', stage: 'LAST_32', group: null, status: 'TIMED', homeTeam: { name: 'Germany' }, awayTeam: null, score: { fullTime: {} } },
+    { id: 200, utcDate: '2026-06-30T19:00:00Z', stage: 'LAST_32', group: null, status: 'TIMED', homeTeam: null, awayTeam: null, score: { fullTime: {} } },
+  ];
+  const seed = { 100: { home: 'Brazil', away: 'Paraguay' }, 200: { home: 'France', away: 'Sweden' } };
+  const byId = Object.fromEntries(buildSchedule(api, (n) => n, seed).map((m) => [m.id, m]));
+  assert.equal(byId[100].home.name, 'Germany');   // feed already named home -> seed ignored
+  assert.equal(byId[100].away.name, 'Paraguay');  // feed away was null -> seed fills it
+  assert.equal(byId[200].home.name, 'France');    // both sides come from the seed
+  assert.equal(byId[200].away.name, 'Sweden');
+  assert.ok(byId[200].away.flag.length > 0);      // seeded team still resolves a flag
+});
+
 console.log(`\n✅  All ${passed} checks passed.\n`);

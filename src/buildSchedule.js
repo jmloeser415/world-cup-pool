@@ -14,11 +14,13 @@ const STAGE_LABEL = {
 
 const side = (name) => ({ name: name || 'TBD', flag: name ? flagFor(name) : '' });
 
-export function buildSchedule(apiMatches, canonical = (n) => n) {
+export function buildSchedule(apiMatches, canonical = (n) => n, seed = {}) {
   return apiMatches
     .map((m) => {
-      const home = m.homeTeam?.name ? canonical(m.homeTeam.name) : null;
-      const away = m.awayTeam?.name ? canonical(m.awayTeam.name) : null;
+      // Real feed data always wins; a seed entry only fills a side the feed hasn't named yet.
+      const s = seed[m.id] || {};
+      const home = m.homeTeam?.name ? canonical(m.homeTeam.name) : (s.home ? canonical(s.home) : null);
+      const away = m.awayTeam?.name ? canonical(m.awayTeam.name) : (s.away ? canonical(s.away) : null);
       const hasScore = ['FINISHED', 'AWARDED', 'IN_PLAY', 'PAUSED'].includes(m.status);
       const ft = m.score?.fullTime || {};
       const letter = groupLetterFromApi(m.group);

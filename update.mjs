@@ -10,6 +10,7 @@ import { getMatches, getStandings, getScorers } from './src/footballData.js';
 import { normalizeName, groupLetterFromApi } from './src/score.js';
 import { buildStatsMap } from './src/buildStatsMap.js';
 import { buildSchedule } from './src/buildSchedule.js';
+import { R32_SEED } from './src/r32Seed.js';
 
 const DRY_RUN = process.argv.includes('--dry-run');
 
@@ -87,7 +88,8 @@ async function main() {
   console.table(board);
   if (warnings.length) console.warn('⚠️  ' + warnings.join('\n⚠️  '));
 
-  const schedule = buildSchedule(apiMatches, canonical);
+  // Seed the finalized R32 matchups the feed hasn't populated yet (free tier fills knockout teams ~kickoff).
+  const schedule = buildSchedule(apiMatches, canonical, R32_SEED);
   console.log(`🗓️  schedule: ${schedule.length} matches · ${schedule.filter((m) => m.status === 'FINISHED').length} finished`);
 
   // Mark eliminated teams for the UI: lost a knockout, or finished the group outside the drawn bracket.
