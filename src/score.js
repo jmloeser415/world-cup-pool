@@ -39,6 +39,19 @@ export function groupLetterFromApi(group) {
   return m ? m[1] : null;
 }
 
+// Open-play goals (regulation + extra time), EXCLUDING any penalty shootout. football-data's
+// `fullTime` folds the shootout in for pens matches (a 0-0 into pens can read 4-3), while
+// `extraTime` holds only the ET-period goals — so add regularTime + extraTime once a match went
+// past 90'. Matches with no extra time keep their full-time score. Used for goals-for / goal
+// difference / clean sheets; who *advanced* is decided separately (full-time score / penalties).
+export function openPlayGoals(score) {
+  const ft = score?.fullTime || {};
+  const rt = score?.regularTime;
+  if (!rt) return { home: ft.home ?? null, away: ft.away ?? null };
+  const et = score?.extraTime || {};
+  return { home: (rt.home ?? 0) + (et.home ?? 0), away: (rt.away ?? 0) + (et.away ?? 0) };
+}
+
 function teamSide(match, teamId) {
   if (match.homeId === teamId) return 'HOME';
   if (match.awayId === teamId) return 'AWAY';
@@ -51,6 +64,7 @@ function goalsAgainst(match, side) { return (side === 'HOME' ? match.awayGoals :
 function isWinner(match, side) {
   if (match.winnerSide && match.winnerSide !== 'DRAW') return match.winnerSide === side;
   if (match.penWinnerSide) return match.penWinnerSide === side;
+  if (match.ftWinnerSide) return match.ftWinnerSide === side; // feed left winner null + penalties tied
   return false;
 }
 

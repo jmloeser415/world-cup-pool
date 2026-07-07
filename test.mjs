@@ -1,7 +1,7 @@
 // `npm test` — offline checks of the scoring engine. No network, no DB.
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { scoreTeam, scorePlayer, rankPlayers } from './src/score.js';
+import { scoreTeam, scorePlayer, rankPlayers, openPlayGoals } from './src/score.js';
 import { buildStatsMap } from './src/buildStatsMap.js';
 import { devig, buildTeamRatings } from './src/ratings.js';
 import { scoreOutcome, eloWinProb, expectedGoals, runForecast, simulateBracket } from './src/forecast.js';
@@ -314,6 +314,24 @@ check('buildSchedule: shootout with null winner + tied penalties resolves to the
   const api = [{ id: 9, utcDate: '2026-07-07T20:00:00Z', stage: 'LAST_16', group: null, status: 'FINISHED', homeTeam: { name: 'Switzerland' }, awayTeam: { name: 'Colombia' }, score: { winner: null, penalties: { home: 3, away: 3 }, fullTime: { home: 4, away: 3 } } }];
   const s = buildSchedule(api, (n) => n);
   assert.equal(s[0].winner, 'home'); // Switzerland advanced (4-3) despite a null winner + tied penalties line
+});
+
+check('openPlayGoals: excludes the shootout; sums regulation + extra time', () => {
+  assert.deepEqual(openPlayGoals({ fullTime: { home: 2, away: 1 } }), { home: 2, away: 1 }); // 90-min match
+  // 0-0 into penalties (Switzerland-Colombia): open play 0-0 even though full-time reads 4-3
+  assert.deepEqual(openPlayGoals({ regularTime: { home: 0, away: 0 }, extraTime: { home: 0, away: 0 }, fullTime: { home: 4, away: 3 }, penalties: { home: 3, away: 3 } }), { home: 0, away: 0 });
+  // extra-time goals are additive (Argentina-Cape Verde): reg 1-1 + et 2-1 = 3-2
+  assert.deepEqual(openPlayGoals({ regularTime: { home: 1, away: 1 }, extraTime: { home: 2, away: 1 }, fullTime: { home: 3, away: 2 } }), { home: 3, away: 2 });
+});
+
+check('buildStatsMap: a 0-0 shootout is a clean sheet with no open-play goals', () => {
+  const T = (id) => ({ id, name: id, group: 'A', owner: 'igor' });
+  // update.mjs feeds open-play goals (0-0); home advances on the full-time (shootout) score
+  const m = fm({ id: 1, stage: 'QUARTER_FINALS', date: '1', homeId: 'esp', awayId: 'x', homeGoals: 0, awayGoals: 0, winnerSide: null, penWinnerSide: null, ftWinnerSide: 'HOME' });
+  const esp = buildStatsMap([T('esp')], [m], {}, {}).esp;
+  assert.equal(esp.cleanSheets, 1); // conceded 0 in open play
+  assert.equal(esp.goalsFor, 0);
+  assert.equal(esp.knockoutWins, 1);
 });
 
 console.log(`\n✅  All ${passed} checks passed.\n`);

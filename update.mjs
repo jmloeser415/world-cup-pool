@@ -7,7 +7,7 @@
 import 'dotenv/config';
 import { PLAYERS, TEAMS, SPECIAL_PICKS } from './src/data.js';
 import { getMatches, getStandings, getScorers } from './src/footballData.js';
-import { normalizeName, groupLetterFromApi } from './src/score.js';
+import { normalizeName, groupLetterFromApi, openPlayGoals } from './src/score.js';
 import { buildStatsMap } from './src/buildStatsMap.js';
 import { buildSchedule } from './src/buildSchedule.js';
 import { R32_SEED } from './src/r32Seed.js';
@@ -37,6 +37,7 @@ async function main() {
 
   const matches = apiMatches.map((m) => {
     const ft = m.score?.fullTime || {};
+    const og = openPlayGoals(m.score); // goals for scoring: open play only (excludes the shootout)
     const w = m.score?.winner;
     const pen = m.score?.penalties;
     // A shootout only decides the tie if it isn't level (the feed occasionally reports a tied
@@ -47,7 +48,7 @@ async function main() {
       id: m.id, stage: m.stage, group: m.group, date: m.utcDate, status: m.status,
       isFinished: m.status === 'FINISHED' || m.status === 'AWARDED',
       homeId: idOf(m.homeTeam), awayId: idOf(m.awayTeam),
-      homeGoals: ft.home, awayGoals: ft.away,
+      homeGoals: og.home, awayGoals: og.away,
       winnerSide: w === 'HOME_TEAM' ? 'HOME' : w === 'AWAY_TEAM' ? 'AWAY' : w === 'DRAW' ? 'DRAW' : null,
       penWinnerSide, ftWinnerSide,
     };

@@ -8,7 +8,7 @@ import 'dotenv/config';
 import { readFileSync, existsSync } from 'node:fs';
 import { PLAYERS, TEAMS, SPECIAL_PICKS } from './src/data.js';
 import { getMatches, getStandings, getScorers } from './src/footballData.js';
-import { normalizeName, groupLetterFromApi } from './src/score.js';
+import { normalizeName, groupLetterFromApi, openPlayGoals } from './src/score.js';
 import { buildTeamRatings, goldenBootProbs } from './src/ratings.js';
 import { runForecast } from './src/forecast.js';
 import { KO_BRACKET_ORDER } from './src/bracket.js';
@@ -78,14 +78,17 @@ async function main() {
     if (!(m.status === 'FINISHED' || m.status === 'AWARDED')) continue;
     const h = canonical(m.homeTeam?.name), a = canonical(m.awayTeam?.name);
     if (!h || !a) continue;
-    const hg = m.score?.fullTime?.home ?? 0, ag = m.score?.fullTime?.away ?? 0;
+    const og = openPlayGoals(m.score); // goals for the sim: open play only (exclude the shootout)
+    const ft = m.score?.fullTime || {};
     const w = m.score?.winner;
     const pen = m.score?.penalties;
-    const penSide = pen && pen.home != null && pen.away != null ? (pen.home > pen.away ? 'HOME' : 'AWAY') : null;
-    const wonSide = w === 'HOME_TEAM' ? 'HOME' : w === 'AWAY_TEAM' ? 'AWAY' : penSide; // pens settle a draw
+    // A shootout decides only if it isn't level; else fall back to the full-time (shootout-inclusive) score.
+    const penSide = pen && pen.home != null && pen.away != null && pen.home !== pen.away ? (pen.home > pen.away ? 'HOME' : 'AWAY') : null;
+    const ftSide = (ft.home ?? 0) > (ft.away ?? 0) ? 'HOME' : (ft.away ?? 0) > (ft.home ?? 0) ? 'AWAY' : null;
+    const wonSide = w === 'HOME_TEAM' ? 'HOME' : w === 'AWAY_TEAM' ? 'AWAY' : penSide ?? ftSide;
     if (!wonSide) continue; // winner not resolvable yet — leave it to the simulation
     const key = h < a ? `${h} | ${a}` : `${a} | ${h}`;
-    knownKO.set(key, { goals: { [h]: hg, [a]: ag }, winner: wonSide === 'HOME' ? h : a });
+    knownKO.set(key, { goals: { [h]: og.home ?? 0, [a]: og.away ?? 0 }, winner: wonSide === 'HOME' ? h : a });
   }
   if (knownKO.size) console.log(`🔒  ${knownKO.size} knockout result(s) locked in.`);
 
