@@ -29,10 +29,12 @@ export function buildSchedule(apiMatches, canonical = (n) => n, seed = {}) {
       const isFinished = m.status === 'FINISHED' || m.status === 'AWARDED';
       const w = m.score?.winner;
       const pen = m.score?.penalties;
-      const penSide = pen && pen.home != null && pen.away != null ? (pen.home > pen.away ? 'home' : 'away') : null;
+      // A shootout only decides the tie if it isn't level; the feed sometimes reports a tied
+      // penalties line + a null winner, so the full-time score is the reliable tiebreak.
+      const penSide = pen && pen.home != null && pen.away != null && pen.home !== pen.away ? (pen.home > pen.away ? 'home' : 'away') : null;
       const winner = !isFinished ? null
-        : penSide ?? (w === 'HOME_TEAM' ? 'home' : w === 'AWAY_TEAM' ? 'away'
-          : ((ft.home ?? 0) > (ft.away ?? 0) ? 'home' : (ft.away ?? 0) > (ft.home ?? 0) ? 'away' : null));
+        : (w === 'HOME_TEAM' ? 'home' : w === 'AWAY_TEAM' ? 'away'
+          : penSide ?? ((ft.home ?? 0) > (ft.away ?? 0) ? 'home' : (ft.away ?? 0) > (ft.home ?? 0) ? 'away' : null));
       return {
         id: m.id,
         date: m.utcDate,

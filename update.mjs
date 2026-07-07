@@ -39,14 +39,17 @@ async function main() {
     const ft = m.score?.fullTime || {};
     const w = m.score?.winner;
     const pen = m.score?.penalties;
-    const penWinnerSide = pen && pen.home != null && pen.away != null ? (pen.home > pen.away ? 'HOME' : 'AWAY') : null;
+    // A shootout only decides the tie if it isn't level (the feed occasionally reports a tied
+    // penalties line + a null winner); the full-time score then reflects who advanced.
+    const penWinnerSide = pen && pen.home != null && pen.away != null && pen.home !== pen.away ? (pen.home > pen.away ? 'HOME' : 'AWAY') : null;
+    const ftWinnerSide = (ft.home ?? 0) > (ft.away ?? 0) ? 'HOME' : (ft.away ?? 0) > (ft.home ?? 0) ? 'AWAY' : null;
     return {
       id: m.id, stage: m.stage, group: m.group, date: m.utcDate, status: m.status,
       isFinished: m.status === 'FINISHED' || m.status === 'AWARDED',
       homeId: idOf(m.homeTeam), awayId: idOf(m.awayTeam),
       homeGoals: ft.home, awayGoals: ft.away,
       winnerSide: w === 'HOME_TEAM' ? 'HOME' : w === 'AWAY_TEAM' ? 'AWAY' : w === 'DRAW' ? 'DRAW' : null,
-      penWinnerSide,
+      penWinnerSide, ftWinnerSide,
     };
   });
 

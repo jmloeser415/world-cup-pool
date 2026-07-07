@@ -299,4 +299,21 @@ check('forecast: knownKO locks a played knockout result (winner advances, loser 
   }
 });
 
+check('knockout: shootout with null feed-winner + tied penalties advances the full-time leader', () => {
+  const T = (id) => ({ id, name: id, group: 'A', owner: 'igor' });
+  const m = fm({ id: 1, stage: 'LAST_16', date: '1', homeId: 'sui', awayId: 'col', homeGoals: 4, awayGoals: 3, winnerSide: null, penWinnerSide: null, ftWinnerSide: 'HOME' });
+  const sui = buildStatsMap([T('sui')], [m], {}, {}).sui;
+  const col = buildStatsMap([T('col')], [m], {}, {}).col;
+  assert.equal(sui.knockoutWins, 1);    // Switzerland advanced on the 4-3 full-time (shootout) score
+  assert.equal(sui.lostKnockout, false);
+  assert.equal(col.knockoutWins, 0);
+  assert.equal(col.lostKnockout, true); // Colombia out
+});
+
+check('buildSchedule: shootout with null winner + tied penalties resolves to the full-time leader', () => {
+  const api = [{ id: 9, utcDate: '2026-07-07T20:00:00Z', stage: 'LAST_16', group: null, status: 'FINISHED', homeTeam: { name: 'Switzerland' }, awayTeam: { name: 'Colombia' }, score: { winner: null, penalties: { home: 3, away: 3 }, fullTime: { home: 4, away: 3 } } }];
+  const s = buildSchedule(api, (n) => n);
+  assert.equal(s[0].winner, 'home'); // Switzerland advanced (4-3) despite a null winner + tied penalties line
+});
+
 console.log(`\n✅  All ${passed} checks passed.\n`);

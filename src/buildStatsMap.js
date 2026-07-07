@@ -17,6 +17,7 @@ const ga = (m, s) => (s === 'HOME' ? m.awayGoals : m.homeGoals) ?? 0;
 function won(m, s) {
   if (m.winnerSide && m.winnerSide !== 'DRAW') return m.winnerSide === s;
   if (m.penWinnerSide) return m.penWinnerSide === s; // advanced on penalties
+  if (m.ftWinnerSide) return m.ftWinnerSide === s;   // feed left winner null + penalties tied -> full-time decides
   return false;
 }
 
