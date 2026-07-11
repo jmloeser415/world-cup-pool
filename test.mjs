@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import { scoreTeam, scorePlayer, rankPlayers, openPlayGoals } from './src/score.js';
 import { buildStatsMap } from './src/buildStatsMap.js';
 import { devig, buildTeamRatings } from './src/ratings.js';
-import { scoreOutcome, eloWinProb, expectedGoals, runForecast, simulateBracket } from './src/forecast.js';
+import { scoreOutcome, eloWinProb, expectedGoals, runForecast, simulateBracket, poissonSample } from './src/forecast.js';
 import { buildSchedule } from './src/buildSchedule.js';
 import { R32_SEED } from './src/r32Seed.js';
 import { KO_BRACKET_ORDER } from './src/bracket.js';
@@ -332,6 +332,13 @@ check('buildStatsMap: a 0-0 shootout is a clean sheet with no open-play goals', 
   assert.equal(esp.cleanSheets, 1); // conceded 0 in open play
   assert.equal(esp.goalsFor, 0);
   assert.equal(esp.knockoutWins, 1);
+});
+
+check('poissonSample: zero mean scores nothing; large mean averages near the mean', () => {
+  for (let i = 0; i < 50; i++) assert.equal(poissonSample(0), 0); // eliminated striker (0 future games) -> 0 goals
+  let sum = 0;
+  for (let i = 0; i < 3000; i++) sum += poissonSample(2);
+  assert.ok(Math.abs(sum / 3000 - 2) < 0.25, 'mean ~2, got ' + sum / 3000);
 });
 
 console.log(`\n✅  All ${passed} checks passed.\n`);

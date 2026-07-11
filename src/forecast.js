@@ -8,7 +8,8 @@
 //  - Knockout games already played are locked in via `knownKO` (actual winner + goals);
 //    only the unplayed ties are simulated.
 //  - Best 8 third-place teams chosen by (points, GD, GF) across the 12 groups.
-//  - Scorer points enter as a per-player expected-value constant (scorerEV).
+//  - Top-scorer goals are SIMULATED (Poisson at gpm per match the striker's team plays), so a
+//    striker can run hot or go cold; the golden-boot bonus stays a fixed prior from odds.
 
 const KO_POINTS = [3, 3, 4, 5, 6]; // R32, R16, QF, SF, Final
 const BASE_GOALS = 1.35;
@@ -175,12 +176,15 @@ export function runForecast({ groups, ratingOf, current, remainingGroupFixtures,
     for (const t of st.values())
       outcome.set(t.name, { groupGamePts: t.pts, placeBonus: t.place, knockoutPts: t.ko, gf: t.gf, ga: t.ga, cleanSheets: t.cs });
 
-    // Scorer points this run: current goals + (goals/match × the matches the team still plays
-    // in THIS sim) × multiplier + golden-boot bonus. fg is 0 once the team is eliminated.
+    // Scorer points this run: current goals + goals SIMULATED over the matches the striker's team
+    // still plays (Poisson with mean gpp/match, so he can run hot or cold) × multiplier + golden-boot
+    // bonus. fg is 0 once the team is eliminated, so an out striker scores no more.
     const scorerPts = {};
     for (const p of players) {
       const sc = scorers[p.id];
-      scorerPts[p.id] = sc ? (sc.currentGoals + (st.get(sc.team)?.fg ?? 0) * sc.gpm) * sc.mult + sc.goldenBootPts : 0;
+      if (!sc) { scorerPts[p.id] = 0; continue; }
+      const futureGoals = poissonSample((st.get(sc.team)?.fg ?? 0) * sc.gpm);
+      scorerPts[p.id] = (sc.currentGoals + futureGoals) * sc.mult + sc.goldenBootPts;
     }
 
     const scored = scoreOutcome(outcome, players, scorerPts);
