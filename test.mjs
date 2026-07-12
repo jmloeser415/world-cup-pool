@@ -304,10 +304,20 @@ check('knockout: shootout with null feed-winner + tied penalties advances the fu
   const m = fm({ id: 1, stage: 'LAST_16', date: '1', homeId: 'sui', awayId: 'col', homeGoals: 4, awayGoals: 3, winnerSide: null, penWinnerSide: null, ftWinnerSide: 'HOME' });
   const sui = buildStatsMap([T('sui')], [m], {}, {}).sui;
   const col = buildStatsMap([T('col')], [m], {}, {}).col;
-  assert.equal(sui.knockoutWins, 1);    // Switzerland advanced on the 4-3 full-time (shootout) score
+  assert.equal(sui.knockoutWins, 2);    // won this R16 shootout (4-3 full-time) -> reached+won R16 = 2 rounds
   assert.equal(sui.lostKnockout, false);
-  assert.equal(col.knockoutWins, 0);
+  assert.equal(col.knockoutWins, 0);    // no knockout win in the provided match
   assert.equal(col.lostKnockout, true); // Colombia out
+});
+
+check('buildStatsMap: knockout wins survive a missing intermediate round (feed gap)', () => {
+  const T = (id) => ({ id, name: id, group: 'A', owner: 'igor' });
+  // Won R32 and QF, but the R16 result never landed in the feed -> still 3 rounds (R32 + R16 + QF).
+  const r32 = fm({ id: 1, stage: 'LAST_32', date: '1', homeId: 'eng', awayId: 'a', homeGoals: 2, awayGoals: 1, winnerSide: 'HOME' });
+  const qf = fm({ id: 3, stage: 'QUARTER_FINALS', date: '3', homeId: 'x', awayId: 'eng', homeGoals: 1, awayGoals: 2, winnerSide: 'AWAY' });
+  const eng = buildStatsMap([T('eng')], [r32, qf], {}, {}).eng;
+  assert.equal(eng.knockoutWins, 3);
+  assert.equal(eng.lostKnockout, false);
 });
 
 check('buildSchedule: shootout with null winner + tied penalties resolves to the full-time leader', () => {
@@ -331,7 +341,7 @@ check('buildStatsMap: a 0-0 shootout is a clean sheet with no open-play goals', 
   const esp = buildStatsMap([T('esp')], [m], {}, {}).esp;
   assert.equal(esp.cleanSheets, 1); // conceded 0 in open play
   assert.equal(esp.goalsFor, 0);
-  assert.equal(esp.knockoutWins, 1);
+  assert.equal(esp.knockoutWins, 3); // won the QF -> reached+won R32 + R16 + QF = 3 rounds
 });
 
 check('poissonSample: zero mean scores nothing; large mean averages near the mean', () => {

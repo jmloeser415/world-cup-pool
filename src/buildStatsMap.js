@@ -10,6 +10,11 @@ const ADVANCE_STAGES = new Set([
   'QUARTER_FINALS', 'QUARTER_FINAL', 'SEMI_FINALS', 'SEMI_FINAL', 'FINAL',
 ]);
 const THIRD_PLACE_STAGES = new Set(['THIRD_PLACE', '3RD_PLACE', 'THIRD_PLACE_PLAYOFF']);
+// Round depth (0=R32 … 4=Final) so knockoutWins can be derived from the deepest round WON.
+const ADVANCE_ROUND_IDX = {
+  ROUND_OF_32: 0, LAST_32: 0, ROUND_OF_16: 1, LAST_16: 1,
+  QUARTER_FINALS: 2, QUARTER_FINAL: 2, SEMI_FINALS: 3, SEMI_FINAL: 3, FINAL: 4,
+};
 
 const side = (m, id) => (m.homeId === id ? 'HOME' : m.awayId === id ? 'AWAY' : null);
 const gf = (m, s) => (s === 'HOME' ? m.homeGoals : m.awayGoals) ?? 0;
@@ -36,7 +41,7 @@ export function buildStatsMap(teams, matches, standingsByTeam, groupCompleteByLe
       gp[i] = f > a ? 3 : f === a ? 1 : 0;
     });
 
-    let goalsFor = 0, goalsAgainst = 0, knockoutWins = 0, wonTitle = false, won3rd = false, lostKnockout = false, cleanSheets = 0;
+    let goalsFor = 0, goalsAgainst = 0, deepestWonIdx = -1, wonTitle = false, won3rd = false, lostKnockout = false, cleanSheets = 0;
     for (const m of mine) {
       const s = side(m, t.id);
       goalsFor += gf(m, s);
@@ -49,13 +54,17 @@ export function buildStatsMap(teams, matches, standingsByTeam, groupCompleteByLe
         continue;
       }
       if (ADVANCE_STAGES.has(m.stage)) {
-        if (won(m, s)) { knockoutWins += 1; if (m.stage === 'FINAL') wonTitle = true; }
+        if (won(m, s)) { deepestWonIdx = Math.max(deepestWonIdx, ADVANCE_ROUND_IDX[m.stage] ?? -1); if (m.stage === 'FINAL') wonTitle = true; }
         // A knockout loss eliminates you — EXCEPT the semifinal (the loser still plays the 3rd-place game).
         else if (m.stage !== 'SEMI_FINALS' && m.stage !== 'SEMI_FINAL') lostKnockout = true;
       } else {
         warn(`Unknown knockout stage "${m.stage}" for ${t.name} (match ${m.id})`);
       }
     }
+    // Rounds won = deepest knockout round actually won, +1. You can't win round N without winning
+    // 1..N-1, so this stays correct even when the feed drops an intermediate round's result (a
+    // stuck R16 fixture once left England — a QF winner — counted for only 2 rounds instead of 3).
+    const knockoutWins = deepestWonIdx + 1;
 
     // group finish only counts once the whole group is played
     let finish = 'other';
