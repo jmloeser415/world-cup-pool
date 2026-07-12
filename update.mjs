@@ -121,8 +121,26 @@ async function main() {
     thirds.sort((a, b) => b.points - a.points || b.gd - a.gd || b.gf - a.gf);
     thirds.slice(8).forEach((t) => eliminatedThirds.add(t.name)); // the 4 lowest thirds miss the cut
   }
+  // Catch knockouts even when the feed drops a result: if the opponent a team met in a knockout
+  // tie has since reached a deeper round, that team must have lost the tie and is out.
+  const KO_ROUND_IDX = { ROUND_OF_32: 0, LAST_32: 0, ROUND_OF_16: 1, LAST_16: 1, QUARTER_FINALS: 2, QUARTER_FINAL: 2, SEMI_FINALS: 3, SEMI_FINAL: 3, FINAL: 4 };
+  const deepestKO = new Map(); // team name -> deepest round actually reached (played/live only, so placeholders don't count)
+  for (const g of schedule) {
+    const idx = KO_ROUND_IDX[g.stage]; if (idx == null) continue;
+    if (!['FINISHED', 'AWARDED', 'IN_PLAY', 'PAUSED'].includes(g.status)) continue;
+    for (const nm of [g.home?.name, g.away?.name]) if (nm && nm !== 'TBD') deepestKO.set(nm, Math.max(deepestKO.get(nm) ?? -1, idx));
+  }
+  const outByAdvance = new Set();
+  for (const g of schedule) {
+    const idx = KO_ROUND_IDX[g.stage]; if (idx == null) continue;
+    const h = g.home?.name, a = g.away?.name;
+    if (!h || !a || h === 'TBD' || a === 'TBD') continue;
+    const hd = deepestKO.get(h) ?? -1, ad = deepestKO.get(a) ?? -1;
+    if (ad > idx && hd <= idx) outByAdvance.add(h); // home's opponent went deeper -> home lost this tie
+    if (hd > idx && ad <= idx) outByAdvance.add(a);
+  }
   for (const [name, s] of Object.entries(statsMap)) {
-    s.eliminated = !!s.lostKnockout || !!s.groupEliminated || eliminatedThirds.has(name) || (bracketDrawn && !koTeams.has(name));
+    s.eliminated = !!s.lostKnockout || !!s.groupEliminated || eliminatedThirds.has(name) || (bracketDrawn && !koTeams.has(name)) || outByAdvance.has(name);
     delete s.lostKnockout;
     delete s.groupEliminated;
   }
