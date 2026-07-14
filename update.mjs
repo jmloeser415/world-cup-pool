@@ -132,7 +132,8 @@ async function main() {
   }
   const outByAdvance = new Set();
   for (const g of schedule) {
-    const idx = KO_ROUND_IDX[g.stage]; if (idx == null) continue;
+    const idx = KO_ROUND_IDX[g.stage];
+    if (idx == null || idx > 2) continue; // R32/R16/QF only — a semifinal loss isn't elimination (loser plays the 3rd-place game)
     const h = g.home?.name, a = g.away?.name;
     if (!h || !a || h === 'TBD' || a === 'TBD') continue;
     const hd = deepestKO.get(h) ?? -1, ad = deepestKO.get(a) ?? -1;
